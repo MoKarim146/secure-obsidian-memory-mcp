@@ -1,3 +1,4 @@
+import { getSecurityConfig } from "./auth.js";
 import { ensureMemoryLayout, getMemoryConfig } from "./memory.js";
 import { startHttpServer } from "./httpServer.js";
 
@@ -6,6 +7,7 @@ const DEFAULT_HOST = "127.0.0.1";
 
 async function main(): Promise<void> {
   const config = getMemoryConfig();
+  const security = getSecurityConfig();
   await ensureMemoryLayout(config);
 
   const port = parsePort(process.env.PORT);
@@ -14,6 +16,7 @@ async function main(): Promise<void> {
 
   const server = await startHttpServer({
     config,
+    security,
     host,
     port,
     allowedHosts,

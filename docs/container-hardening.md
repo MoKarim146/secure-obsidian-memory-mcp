@@ -5,6 +5,8 @@ The production image is designed to run compiled JavaScript from `dist/`, not `t
 ## Defaults
 
 - `NODE_ENV=production`.
+- `MCP_AUTH_REQUIRED=true`.
+- `AI_MEMORY_WRITE_ENABLED=false`.
 - Non-root runtime user `10001:10001`.
 - Memory directory mounted at `/memory`.
 - Healthcheck calls `/health` every 30 seconds.
@@ -29,6 +31,12 @@ The production image is designed to run compiled JavaScript from `dist/`, not `t
 Do not bake real vault data into the image. Mount a dedicated memory directory or Docker volume at `/memory`.
 
 For public demos, use fake data only. For production, use a dedicated memory directory rather than an entire private Obsidian vault.
+
+## Authentication
+
+Containers require bearer authentication by default. Set `MCP_READ_TOKEN` and `MCP_WRITE_TOKEN` to distinct long random values at deploy time. Keep `AI_MEMORY_WRITE_ENABLED=false` unless a trusted write-capable client needs write tools.
+
+Do not publish a tunnel or container port without auth. A public tunnel with `MCP_AUTH_REQUIRED=false` is unsafe.
 
 ## Large Vaults
 

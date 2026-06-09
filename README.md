@@ -41,6 +41,9 @@ There is intentionally no delete tool.
 
 Current protections include:
 
+- Bearer-token authentication for the MCP endpoint.
+- Separate read and write tokens.
+- Write tools disabled by default through `AI_MEMORY_WRITE_ENABLED=false`.
 - Markdown-only note access.
 - Relative paths only; absolute paths and `../` traversal are rejected.
 - Realpath checks keep resolved files inside `AI_MEMORY_DIR`.
@@ -50,7 +53,7 @@ Current protections include:
 - Zod validation on tool inputs.
 - Request error logs avoid note content.
 
-Authentication and audit logging are planned, but not implemented yet. Do not expose this server to untrusted networks without an authenticated reverse proxy or tunnel access control.
+Audit logging is planned, but not implemented yet. Do not expose this server to untrusted networks without bearer authentication enabled.
 
 ## Privacy Warning
 
@@ -71,6 +74,8 @@ Run against the fake sample vault:
 ```bash
 cp .env.example .env
 export AI_MEMORY_DIR="$PWD/examples/sample-vault"
+export MCP_READ_TOKEN="$(openssl rand -hex 32)"
+export MCP_WRITE_TOKEN="$(openssl rand -hex 32)"
 npm run build
 npm start
 ```
@@ -97,14 +102,29 @@ Key variables:
 - `HOST`: bind address; keep `127.0.0.1` unless you know why you need more.
 - `AI_MEMORY_DIR`: markdown memory directory.
 - `ALLOWED_HOSTS`: comma-separated additional Host header values.
-- `AI_MEMORY_WRITE_ENABLED`: planned write gate.
+- `MCP_AUTH_REQUIRED`: defaults to `true`. Set `false` only for explicit local development on `127.0.0.1`.
+- `MCP_READ_TOKEN`: bearer token that can call read-only tools.
+- `MCP_WRITE_TOKEN`: bearer token that can call read and write tools.
+- `AI_MEMORY_WRITE_ENABLED`: defaults to `false`. Write tools are blocked unless this is `true`.
 - `LOG_CONTENT`, `MASK_EMAILS`, `MASK_PHONE_NUMBERS`, `MAX_SNIPPET_CHARS`: planned logging/privacy controls.
-- `MCP_AUTH_REQUIRED`, `MCP_READ_TOKEN`, `MCP_WRITE_TOKEN`: planned authentication controls.
 
-Some variables are documented ahead of implementation so safe deployment expectations are visible early.
+When `MCP_AUTH_REQUIRED=true`, both tokens must be present and distinct. Missing tokens fail startup safely. MCP clients must send:
+
+```text
+Authorization: Bearer <token>
+```
+
+The read token can call `read_main_context`, `read_handoff_summary`, `search_memory`, and `read_note`. The write token can also call `update_handoff_summary`, `append_session_note`, `add_decision`, and `add_open_task`, but only when `AI_MEMORY_WRITE_ENABLED=true`.
+
+For safe local development without auth, keep `HOST=127.0.0.1` and explicitly set:
+
+```bash
+export MCP_AUTH_REQUIRED=false
+export AI_MEMORY_WRITE_ENABLED=false
+```
 
 ## Safe Public Tunnel Warning
 
 Public tunnels such as ngrok, Cloudflare Tunnel, Tailscale Funnel, or similar tools can make this local MCP server reachable from the internet. A tunnel URL is effectively a remote access path to your memory server.
 
-Until server-side authentication is implemented, public tunneling requires authentication at the tunnel or reverse-proxy layer. Use provider access controls, short-lived tunnels, and least-privilege test data. Stop the tunnel when finished.
+For public tunnels, keep `MCP_AUTH_REQUIRED=true`, use long random read/write tokens, keep `AI_MEMORY_WRITE_ENABLED=false` unless a trusted write-capable client needs it, and add the tunnel host to `ALLOWED_HOSTS` if required. A public tunnel without auth is unsafe. Use provider access controls, short-lived tunnels, and least-privilege test data. Stop the tunnel when finished.

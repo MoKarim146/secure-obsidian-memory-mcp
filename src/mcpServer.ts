@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { assertWriteToolsEnabled, type SecurityConfig } from "./auth.js";
 import {
   addDecision,
   addOpenTask,
@@ -15,7 +16,7 @@ import {
 const serverInstructions =
   "Local-first Obsidian AI memory connector. Read from and write only to the configured AI_MEMORY_DIR. No delete tools exist. Use read_handoff_summary before changing handoff notes. Write tools modify markdown files and should be used only when the user asks to persist memory.";
 
-export function createObsidianMemoryMcpServer(config: MemoryConfig): McpServer {
+export function createObsidianMemoryMcpServer(config: MemoryConfig, security: SecurityConfig): McpServer {
   const server = new McpServer(
     {
       name: "obsidian-memory-mcp",
@@ -121,6 +122,7 @@ export function createObsidianMemoryMcpServer(config: MemoryConfig): McpServer {
       },
     },
     async ({ content }) => {
+      assertWriteToolsEnabled(security);
       const file = await updateHandoffSummary(config, content);
       return textResult({
         path: file.path,
@@ -149,6 +151,7 @@ export function createObsidianMemoryMcpServer(config: MemoryConfig): McpServer {
       },
     },
     async ({ model_name, title, content }) => {
+      assertWriteToolsEnabled(security);
       const file = await appendSessionNote(config, model_name, title, content);
       return textResult({
         path: file.path,
@@ -176,6 +179,7 @@ export function createObsidianMemoryMcpServer(config: MemoryConfig): McpServer {
       },
     },
     async ({ decision, reason }) => {
+      assertWriteToolsEnabled(security);
       const file = await addDecision(config, decision, reason);
       return textResult({
         path: file.path,
@@ -204,6 +208,7 @@ export function createObsidianMemoryMcpServer(config: MemoryConfig): McpServer {
       },
     },
     async ({ task, priority, project }) => {
+      assertWriteToolsEnabled(security);
       const file = await addOpenTask(config, task, priority, project);
       return textResult({
         path: file.path,
