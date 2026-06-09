@@ -14,6 +14,9 @@ services:
       MCP_AUTH_REQUIRED: "true"
       AI_MEMORY_WRITE_ENABLED: "false"
       LOG_CONTENT: "false"
+      MASK_EMAILS: "true"
+      MASK_PHONE_NUMBERS: "true"
+      MAX_SNIPPET_CHARS: "220"
     ports:
       - "127.0.0.1:8787:8787"
     volumes:

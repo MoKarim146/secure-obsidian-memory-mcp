@@ -1,6 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { assertWriteToolsEnabled, type SecurityConfig } from "./auth.js";
+import {
+  auditToolAllowed,
+  getContentLengthForTool,
+  type AuditLogger,
+  type ToolAuditDetails,
+} from "./audit.js";
+import { assertWriteToolsEnabled, type AuthenticatedRequest, type SecurityConfig } from "./auth.js";
 import {
   addDecision,
   addOpenTask,
@@ -16,7 +22,12 @@ import {
 const serverInstructions =
   "Local-first Obsidian AI memory connector. Read from and write only to the configured AI_MEMORY_DIR. No delete tools exist. Use read_handoff_summary before changing handoff notes. Write tools modify markdown files and should be used only when the user asks to persist memory.";
 
-export function createObsidianMemoryMcpServer(config: MemoryConfig, security: SecurityConfig): McpServer {
+export function createObsidianMemoryMcpServer(
+  config: MemoryConfig,
+  security: SecurityConfig,
+  audit: AuditLogger,
+  auth: AuthenticatedRequest,
+): McpServer {
   const server = new McpServer(
     {
       name: "obsidian-memory-mcp",
@@ -39,8 +50,13 @@ export function createObsidianMemoryMcpServer(config: MemoryConfig, security: Se
         openWorldHint: false,
       },
     },
-    async () => {
+    async (extra) => {
       const files = await readMainContext(config);
+      auditToolAllowed(audit, auth, "read", {
+        tool: "read_main_context",
+        resultCount: files.length,
+        ...getExtraAuditDetails(extra),
+      });
       return textResult({
         files,
       });
@@ -59,8 +75,13 @@ export function createObsidianMemoryMcpServer(config: MemoryConfig, security: Se
         openWorldHint: false,
       },
     },
-    async () => {
+    async (extra) => {
       const file = await readHandoffSummary(config);
+      auditToolAllowed(audit, auth, "read", {
+        tool: "read_handoff_summary",
+        relativePath: file.path,
+        ...getExtraAuditDetails(extra),
+      });
       return textResult(file);
     },
   );
@@ -79,8 +100,14 @@ export function createObsidianMemoryMcpServer(config: MemoryConfig, security: Se
         openWorldHint: false,
       },
     },
-    async ({ query }) => {
+    async ({ query }, extra) => {
       const result = await searchMemory(config, query);
+      auditToolAllowed(audit, auth, "read", {
+        tool: "search_memory",
+        queryLength: Buffer.byteLength(query, "utf8"),
+        resultCount: result.matches.length,
+        ...getExtraAuditDetails(extra),
+      });
       return textResult(result);
     },
   );
@@ -99,8 +126,13 @@ export function createObsidianMemoryMcpServer(config: MemoryConfig, security: Se
         openWorldHint: false,
       },
     },
-    async ({ path }) => {
+    async ({ path }, extra) => {
       const file = await readNote(config, path);
+      auditToolAllowed(audit, auth, "read", {
+        tool: "read_note",
+        relativePath: file.path,
+        ...getExtraAuditDetails(extra),
+      });
       return textResult(file);
     },
   );
@@ -121,9 +153,15 @@ export function createObsidianMemoryMcpServer(config: MemoryConfig, security: Se
         openWorldHint: false,
       },
     },
-    async ({ content }) => {
+    async ({ content }, extra) => {
       assertWriteToolsEnabled(security);
       const file = await updateHandoffSummary(config, content);
+      auditToolAllowed(audit, auth, "write", {
+        tool: "update_handoff_summary",
+        relativePath: file.path,
+        contentLength: Buffer.byteLength(content, "utf8"),
+        ...getExtraAuditDetails(extra),
+      });
       return textResult({
         path: file.path,
         bytes: Buffer.byteLength(file.content, "utf8"),
@@ -150,9 +188,15 @@ export function createObsidianMemoryMcpServer(config: MemoryConfig, security: Se
         openWorldHint: false,
       },
     },
-    async ({ model_name, title, content }) => {
+    async ({ model_name, title, content }, extra) => {
       assertWriteToolsEnabled(security);
       const file = await appendSessionNote(config, model_name, title, content);
+      auditToolAllowed(audit, auth, "write", {
+        tool: "append_session_note",
+        relativePath: "Sessions/<generated-session-note>",
+        contentLength: Buffer.byteLength(content, "utf8"),
+        ...getExtraAuditDetails(extra),
+      });
       return textResult({
         path: file.path,
         bytes: Buffer.byteLength(file.content, "utf8"),
@@ -178,9 +222,15 @@ export function createObsidianMemoryMcpServer(config: MemoryConfig, security: Se
         openWorldHint: false,
       },
     },
-    async ({ decision, reason }) => {
+    async ({ decision, reason }, extra) => {
       assertWriteToolsEnabled(security);
       const file = await addDecision(config, decision, reason);
+      auditToolAllowed(audit, auth, "write", {
+        tool: "add_decision",
+        relativePath: file.path,
+        contentLength: getContentLengthForTool("add_decision", { decision, reason }),
+        ...getExtraAuditDetails(extra),
+      });
       return textResult({
         path: file.path,
         bytes: Buffer.byteLength(file.content, "utf8"),
@@ -207,9 +257,15 @@ export function createObsidianMemoryMcpServer(config: MemoryConfig, security: Se
         openWorldHint: false,
       },
     },
-    async ({ task, priority, project }) => {
+    async ({ task, priority, project }, extra) => {
       assertWriteToolsEnabled(security);
       const file = await addOpenTask(config, task, priority, project);
+      auditToolAllowed(audit, auth, "write", {
+        tool: "add_open_task",
+        relativePath: file.path,
+        contentLength: getContentLengthForTool("add_open_task", { task, priority, project }),
+        ...getExtraAuditDetails(extra),
+      });
       return textResult({
         path: file.path,
         bytes: Buffer.byteLength(file.content, "utf8"),
@@ -230,5 +286,13 @@ function textResult<T extends object>(data: T) {
       },
     ],
     structuredContent: data as Record<string, unknown>,
+  };
+}
+
+function getExtraAuditDetails(extra: { requestId?: unknown; sessionId?: string }): ToolAuditDetails {
+  return {
+    requestId:
+      typeof extra.requestId === "string" || typeof extra.requestId === "number" ? extra.requestId : undefined,
+    sessionId: extra.sessionId,
   };
 }

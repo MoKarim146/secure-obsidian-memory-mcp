@@ -31,6 +31,7 @@ Do not include real vault contents, secrets, tokens, private tunnel URLs, emails
 ## Known Risks
 
 - Public tunnels can expose the MCP endpoint to anyone who can reach the URL unless the tunnel is protected.
+- Audit logs can reveal connection metadata and attempted tool names; treat operational logs as sensitive even though note bodies and tokens are excluded.
 - Connected AI assistants may send note content to their provider.
 - Search/read tools can expose any markdown file under `AI_MEMORY_DIR`.
 - Write tools can persist unwanted content if an untrusted client is connected.
@@ -49,6 +50,7 @@ Do not include real vault contents, secrets, tokens, private tunnel URLs, emails
 - Keep `.env` out of Git.
 - Do not commit real Obsidian notes or private memory.
 - Do not commit tokens, tunnel URLs, logs, or local config files.
+- Keep `LOG_CONTENT=false`, `MASK_EMAILS=true`, and `MASK_PHONE_NUMBERS=true` unless you have a reviewed operational reason to change them.
 - Keep public tunnels disabled unless protected by authentication.
 - If tunneling is required, enforce authentication before traffic reaches `/mcp`.
 - Stop tunnels immediately after use.
@@ -58,3 +60,9 @@ Do not include real vault contents, secrets, tokens, private tunnel URLs, emails
 Public tunneling requires `MCP_AUTH_REQUIRED=true` and long random bearer tokens. A random-looking tunnel URL is not a sufficient security boundary. Treat an unauthenticated tunnel as public internet exposure of your local MCP gateway.
 
 For local development only, you may explicitly set `MCP_AUTH_REQUIRED=false` while bound to `127.0.0.1`. Do not combine public tunnels with disabled auth.
+
+## Audit Logs
+
+Audit logs are JSON lines on stdout. They include startup security mode, auth failures, denied tool calls, blocked write attempts, and successful tool calls. They are intentionally limited to metadata such as tool name, permission, reason code, safe host/origin/IP values, relative path, content length, query length, and result count.
+
+Audit logs must never include bearer tokens, note bodies, write bodies, full search queries, full private file contents, `.env` values, tunnel URLs, or private filesystem paths. Use them to detect unsafe tunnel exposure and unauthorized probing, and keep collected logs out of Git.
