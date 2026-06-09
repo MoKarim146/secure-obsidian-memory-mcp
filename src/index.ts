@@ -1,3 +1,4 @@
+import { auditStartup, createConsoleAuditLogger, getAuditConfig } from "./audit.js";
 import { getSecurityConfig } from "./auth.js";
 import { ensureMemoryLayout, getMemoryConfig } from "./memory.js";
 import { startHttpServer } from "./httpServer.js";
@@ -8,6 +9,8 @@ const DEFAULT_HOST = "127.0.0.1";
 async function main(): Promise<void> {
   const config = getMemoryConfig();
   const security = getSecurityConfig();
+  const auditConfig = getAuditConfig();
+  const audit = createConsoleAuditLogger(auditConfig);
   await ensureMemoryLayout(config);
 
   const port = parsePort(process.env.PORT);
@@ -17,11 +20,13 @@ async function main(): Promise<void> {
   const server = await startHttpServer({
     config,
     security,
+    audit,
     host,
     port,
     allowedHosts,
   });
 
+  auditStartup(audit, security, auditConfig);
   console.log(`obsidian-memory-mcp listening on http://${host}:${port}/mcp`);
 
   const shutdown = async () => {

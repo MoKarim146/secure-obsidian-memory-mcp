@@ -4,9 +4,19 @@ import express, { type Request, type Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import {
+  auditAuthFailure,
+  auditSessionRequestDenied,
+  auditToolDenied,
+  createConsoleAuditLogger,
+  getRequestAuditContext,
+  getToolAuditDetails,
+  type AuditLogger,
+} from "./audit.js";
+import {
   authenticateBearerToken,
   authorizeMcpRequestBody,
   type AuthFailure,
+  type AuthenticatedRequest,
   type SecurityConfig,
 } from "./auth.js";
 import type { MemoryConfig } from "./memory.js";
@@ -15,11 +25,13 @@ import { createObsidianMemoryMcpServer } from "./mcpServer.js";
 interface ActiveSession {
   server: ReturnType<typeof createObsidianMemoryMcpServer>;
   transport: StreamableHTTPServerTransport;
+  auth: AuthenticatedRequest;
 }
 
 export interface HttpServerOptions {
   config: MemoryConfig;
   security: SecurityConfig;
+  audit?: AuditLogger;
   host: string;
   port: number;
   allowedHosts?: string[];
@@ -30,6 +42,7 @@ const DEFAULT_ALLOWED_SUFFIXES = [".ngrok-free.app", ".ngrok.app", ".trycloudfla
 
 export function createHttpApp(options: HttpServerOptions): express.Express {
   const app = express();
+  const audit = options.audit ?? createConsoleAuditLogger();
   const sessions = new Map<string, ActiveSession>();
 
   app.disable("x-powered-by");
@@ -46,15 +59,15 @@ export function createHttpApp(options: HttpServerOptions): express.Express {
   });
 
   app.post("/mcp", async (req, res) => {
-    await handleMcpPost(req, res, options.config, options.security, sessions);
+    await handleMcpPost(req, res, options.config, options.security, audit, sessions);
   });
 
   app.get("/mcp", async (req, res) => {
-    await handleExistingSessionRequest(req, res, options.security, sessions);
+    await handleExistingSessionRequest(req, res, options.security, audit, sessions);
   });
 
   app.delete("/mcp", async (req, res) => {
-    await handleExistingSessionRequest(req, res, options.security, sessions);
+    await handleExistingSessionRequest(req, res, options.security, audit, sessions);
   });
 
   app.use((_req, res) => {
@@ -81,17 +94,21 @@ async function handleMcpPost(
   res: Response,
   config: MemoryConfig,
   security: SecurityConfig,
+  audit: AuditLogger,
   sessions: Map<string, ActiveSession>,
 ): Promise<void> {
   try {
+    const auditContext = getRequestAuditContext(req);
     const auth = authenticateBearerToken(req.headers.authorization, security);
     if ("status" in auth) {
+      auditAuthFailure(audit, auth, auditContext);
       sendAuthError(res, auth);
       return;
     }
 
     const authzError = authorizeMcpRequestBody(req.body, auth, security);
     if (authzError) {
+      auditToolDenied(audit, authzError, getToolAuditDetails(req.body), auditContext);
       sendAuthError(res, authzError);
       return;
     }
@@ -100,6 +117,7 @@ async function handleMcpPost(
     const existingSession = sessionId ? sessions.get(sessionId) : undefined;
 
     if (existingSession) {
+      existingSession.auth.access = auth.access;
       await existingSession.transport.handleRequest(req, res, req.body);
       return;
     }
@@ -124,8 +142,8 @@ async function handleMcpPost(
       },
     });
 
-    const mcpServer = createObsidianMemoryMcpServer(config, security);
-    activeSession = { server: mcpServer, transport };
+    const mcpServer = createObsidianMemoryMcpServer(config, security, audit, auth);
+    activeSession = { server: mcpServer, transport, auth };
 
     transport.onclose = () => {
       const closedSessionId = transport.sessionId;
@@ -148,11 +166,14 @@ async function handleExistingSessionRequest(
   req: Request,
   res: Response,
   security: SecurityConfig,
+  audit: AuditLogger,
   sessions: Map<string, ActiveSession>,
 ): Promise<void> {
   try {
+    const auditContext = getRequestAuditContext(req);
     const auth = authenticateBearerToken(req.headers.authorization, security);
     if ("status" in auth) {
+      auditSessionRequestDenied(audit, auth, auditContext);
       res.status(auth.status).send(auth.message);
       return;
     }

@@ -18,6 +18,8 @@ export interface AuthFailure {
   status: 401 | 403;
   code: number;
   message: string;
+  reason: "missing_or_invalid_auth" | "unknown_tool" | "insufficient_permission" | "writes_disabled";
+  permission?: ToolPermission | "disabled" | "none";
 }
 
 export const READ_TOOLS = [
@@ -109,15 +111,15 @@ export function authorizeMcpRequestBody(
 
     const permission = getToolPermission(toolName);
     if (!permission) {
-      return forbidden();
+      return forbidden("unknown_tool", "none");
     }
 
     if (permission === "write" && !config.memoryWriteEnabled) {
-      return forbidden("Write tools are disabled");
+      return forbidden("writes_disabled", "disabled", "Write tools are disabled");
     }
 
     if (permission === "write" && auth.access !== "write") {
-      return forbidden();
+      return forbidden("insufficient_permission", "write");
     }
   }
 
@@ -202,14 +204,18 @@ function unauthorized(): AuthFailure {
     status: 401,
     code: -32001,
     message: "Unauthorized",
+    reason: "missing_or_invalid_auth",
+    permission: "none",
   };
 }
 
-function forbidden(message = "Forbidden"): AuthFailure {
+function forbidden(reason: AuthFailure["reason"], permission: AuthFailure["permission"], message = "Forbidden"): AuthFailure {
   return {
     status: 403,
     code: -32003,
     message,
+    reason,
+    permission,
   };
 }
 
