@@ -15,9 +15,34 @@ The server should not be pointed at an entire private Obsidian vault unless you 
 
 ## Data Logged
 
-Current server error logs include operational error messages such as failed request handling. They should not include note bodies or secrets.
+The server emits privacy-preserving audit logs as JSON lines on stdout. Audit events include security metadata such as:
 
-Planned privacy controls include content logging switches, email masking, phone-number masking, and snippet length limits. Until those controls are implemented, avoid adding verbose request logging.
+- Startup security mode summary.
+- Missing or invalid auth attempts.
+- Denied read/write tool calls.
+- Write attempts blocked because `AI_MEMORY_WRITE_ENABLED=false`.
+- Successful tool calls.
+- Tool name, permission level, allowed/denied status, and reason code.
+- Safe client IP, host, origin, request ID, or session ID when already available.
+- Relative note path when applicable.
+- Search query length and result count, not the query text.
+- Write content length, not the body.
+
+Audit logs and operational error logs should not include note bodies or secrets.
+
+## Data Never Logged
+
+The audit logger must never log:
+
+- Bearer tokens or `Authorization` headers.
+- Note bodies, write bodies, or full private file contents.
+- Full search queries.
+- `.env` values.
+- Private vault root paths.
+
+`LOG_CONTENT=false`, `MASK_EMAILS=true`, and `MASK_PHONE_NUMBERS=true` are the privacy-preserving defaults. Even if `LOG_CONTENT=true`, audit logs still do not include bearer tokens, note bodies, write bodies, or full search queries. `MAX_SNIPPET_CHARS` bounds logged metadata strings.
+
+Logs go to stdout by default. Redirect stdout with your shell, process manager, Docker, or hosting environment if you need to collect logs elsewhere. Do not commit collected logs.
 
 ## Data That Must Never Be Committed
 
