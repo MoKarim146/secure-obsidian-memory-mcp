@@ -75,7 +75,7 @@ export function createObsidianMemoryMcpServer(
         openWorldHint: false,
       },
     },
-    async (extra) => {
+    async (_args, extra) => {
       const file = await readHandoffSummary(config);
       auditToolAllowed(audit, auth, "read", {
         tool: "read_handoff_summary",
