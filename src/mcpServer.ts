@@ -50,7 +50,7 @@ export function createObsidianMemoryMcpServer(
         openWorldHint: false,
       },
     },
-    async (extra) => {
+    async (_args, extra) => {
       const files = await readMainContext(config);
       auditToolAllowed(audit, auth, "read", {
         tool: "read_main_context",
