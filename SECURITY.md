@@ -37,6 +37,7 @@ Do not include real vault contents, secrets, tokens, private tunnel URLs, emails
 ## Safe Configuration Checklist
 
 - Keep `HOST=127.0.0.1` for local use.
+- Leave `ALLOWED_ORIGINS` empty unless a browser-based client really needs access. Requests from web pages are refused by default.
 - Point `AI_MEMORY_DIR` at a dedicated memory directory, not an entire private vault.
 - Use `examples/sample-vault/` for demos, screenshots, tests, and GitHub examples.
 - Keep `.env` out of Git.
