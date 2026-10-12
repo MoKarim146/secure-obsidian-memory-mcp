@@ -47,8 +47,11 @@ Current protections include:
 - Symlinked directories and notes are rejected or skipped.
 - Writes are limited to controlled memory files and generated session notes.
 - Host-header guard for local and explicitly allowed hosts.
+- Origin guard: requests from web pages are refused unless their origin is in `ALLOWED_ORIGINS` (empty by default).
 - Zod validation on tool inputs.
 - Request error logs avoid note content.
+
+These protections are attacked by 27 adversarial tests, including a prompt injection test with a real agent. Results, including the known gaps, are in [SECURITY_TESTS.md](SECURITY_TESTS.md).
 
 Authentication and audit logging are planned, but not implemented yet. Do not expose this server to untrusted networks without an authenticated reverse proxy or tunnel access control.
 
@@ -97,6 +100,7 @@ Key variables:
 - `HOST`: bind address; keep `127.0.0.1` unless you know why you need more.
 - `AI_MEMORY_DIR`: markdown memory directory.
 - `ALLOWED_HOSTS`: comma-separated additional Host header values.
+- `ALLOWED_ORIGINS`: comma-separated browser origins allowed to call the server. Leave empty unless a browser-based client needs access.
 - `AI_MEMORY_WRITE_ENABLED`: planned write gate.
 - `LOG_CONTENT`, `MASK_EMAILS`, `MASK_PHONE_NUMBERS`, `MAX_SNIPPET_CHARS`: planned logging/privacy controls.
 - `MCP_AUTH_REQUIRED`, `MCP_READ_TOKEN`, `MCP_WRITE_TOKEN`: planned authentication controls.
