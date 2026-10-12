@@ -10,13 +10,15 @@ async function main(): Promise<void> {
 
   const port = parsePort(process.env.PORT);
   const host = process.env.HOST || DEFAULT_HOST;
-  const allowedHosts = parseAllowedHosts(process.env.ALLOWED_HOSTS);
+  const allowedHosts = parseList(process.env.ALLOWED_HOSTS);
+  const allowedOrigins = parseList(process.env.ALLOWED_ORIGINS);
 
   const server = await startHttpServer({
     config,
     host,
     port,
     allowedHosts,
+    allowedOrigins,
   });
 
   console.log(`obsidian-memory-mcp listening on http://${host}:${port}/mcp`);
@@ -56,7 +58,7 @@ function parsePort(value: string | undefined): number {
   return port;
 }
 
-function parseAllowedHosts(value: string | undefined): string[] {
+function parseList(value: string | undefined): string[] {
   if (!value) {
     return [];
   }

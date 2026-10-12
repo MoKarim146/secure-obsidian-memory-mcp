@@ -16,6 +16,7 @@ export interface HttpServerOptions {
   host: string;
   port: number;
   allowedHosts?: string[];
+  allowedOrigins?: string[];
 }
 
 const DEFAULT_ALLOWED_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
@@ -27,8 +28,8 @@ export function createHttpApp(options: HttpServerOptions): express.Express {
 
   app.disable("x-powered-by");
   app.use(express.json({ limit: "1mb" }));
-  app.use(corsHeaders);
   app.use(hostHeaderGuard(options.allowedHosts));
+  app.use(originGuard(options.allowedOrigins));
 
   app.get("/health", (_req, res) => {
     res.json({
@@ -151,21 +152,41 @@ async function handleExistingSessionRequest(
   }
 }
 
-function corsHeaders(req: Request, res: Response, next: () => void): void {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Accept, mcp-session-id, mcp-protocol-version, last-event-id",
-  );
-  res.setHeader("Access-Control-Expose-Headers", "mcp-session-id");
+// Browsers attach an Origin header to requests from web pages; MCP clients such as Claude Code send none.
+// A request with an Origin is refused unless that origin is in ALLOWED_ORIGINS (empty by default), so a
+// website open in the user's browser cannot read or write memory through 127.0.0.1. CORS headers are only
+// sent back to allowed origins.
+function originGuard(extraAllowedOrigins: string[] = []) {
+  const allowedOrigins = new Set(extraAllowedOrigins.map((origin) => origin.trim().toLowerCase().replace(/\/$/, "")));
 
-  if (req.method === "OPTIONS") {
-    res.status(204).end();
-    return;
-  }
+  return (req: Request, res: Response, next: () => void): void => {
+    const origin = getHeader(req, "origin");
+    if (origin === undefined) {
+      next();
+      return;
+    }
 
-  next();
+    if (!allowedOrigins.has(origin.toLowerCase())) {
+      res.status(403).json({ error: "Forbidden origin" });
+      return;
+    }
+
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Accept, mcp-session-id, mcp-protocol-version, last-event-id",
+    );
+    res.setHeader("Access-Control-Expose-Headers", "mcp-session-id");
+
+    if (req.method === "OPTIONS") {
+      res.status(204).end();
+      return;
+    }
+
+    next();
+  };
 }
 
 function hostHeaderGuard(extraAllowedHosts: string[] = []) {
